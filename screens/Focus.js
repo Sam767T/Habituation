@@ -1,16 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { addStopwatchRecord, getStopwatchRecords } from '../db/stopwatchDB';
+import { Swipeable } from 'react-native-gesture-handler';
+import { deleteStopwatchRecord, addStopwatchRecord, getStopwatchRecords } from '../db/stopwatchDB';
 
 export default function Focus() {
   const [name, setName] = useState('');
   const [running, setRunning] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [records, setRecords] = useState([]);
+  const [customSuggestions, setCustomSuggestions] = useState([]);
   const startRef = useRef(null);
   const intervalRef = useRef(null);
+  const defaultSuggestions = ['Read', 'Write', 'Focus', 'Exercise'];
 
   useEffect(() => {
     loadRecords();
@@ -26,6 +30,9 @@ export default function Focus() {
     try {
       const data = await getStopwatchRecords();
       setRecords(data);
+      // Extract unique activity names from records
+      const uniqueNames = [...new Set(data.map(record => record.name).filter(name => name && !defaultSuggestions.includes(name)))];
+      setCustomSuggestions(uniqueNames);
     } catch (error) {
       console.error('Failed to load records:', error);
     }
@@ -68,6 +75,8 @@ export default function Focus() {
     } catch (error) {
       console.error('Failed to save record:', error);
     }
+    setElapsedMs(0);
+    setName('');
   };
 
   const toggleTimer = () => {
@@ -76,6 +85,37 @@ export default function Focus() {
     } else {
       start();
     }
+  };
+
+  const handleDeleteRecord = async (id) => {
+    try {
+      await deleteStopwatchRecord(id);
+      await loadRecords();
+    } catch (error) {
+      console.error('Failed to delete record:', error);
+    }
+  };
+
+  const renderRightActions = (recordId) => (
+    <Pressable
+      style={styles.deleteAction}
+      onPress={() => handleDeleteRecord(recordId)}
+    >
+      <Ionicons name="trash" size={24} color="#fff" />
+    </Pressable>
+  );
+
+  const renderSuggestions = () => {
+    const allSuggestions = [...defaultSuggestions, ...customSuggestions];
+    return allSuggestions.map((suggestion) => (
+      <Pressable
+        key={suggestion}
+        style={styles.suggestionButton}
+        onPress={() => setName(suggestion)}
+      >
+        <Text style={styles.suggestionText}>{suggestion}</Text>
+      </Pressable>
+    ));
   };
 
   const formatTime = (ms) => {
@@ -92,15 +132,27 @@ export default function Focus() {
   };
 
   return (
-    <ScrollView style={styles.scrollContainer}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView style={styles.scrollContainer}>
       <View style={styles.timerSection}>
-        <Text style={styles.title}>{name ? name : 'Focus'}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Name your stopwatch"
-          value={name}
-          onChangeText={setName}
-        />
+        <View style={styles.suggestionsContainer}>
+          {renderSuggestions()}
+        </View>
+        {running ? (
+          <Text style={styles.activityText}>{name || 'Activity'}</Text>
+        ) : (
+          <TextInput
+            style={styles.input}
+            placeholder="Activity"
+            placeholderTextColor="#999"
+            value={name}
+            onChangeText={setName}
+            maxLength={20}
+            cursorColor="#007AFF"
+            autoFocus={false}
+            caretHidden={false}
+          />
+        )}
         <Text style={styles.time}>{formatTime(elapsedMs)}</Text>
         <Pressable style={styles.iconButton} onPress={toggleTimer}>
           <Ionicons
@@ -117,18 +169,28 @@ export default function Focus() {
           <Text style={styles.noRecords}>No sessions yet</Text>
         ) : (
           records.map((record) => (
-            <View key={record.id} style={styles.recordBlock}>
-              <Text style={styles.recordName}>{record.name}</Text>
-              <Text style={styles.recordTime}>{formatTime(record.duration_ms)}</Text>
-            </View>
+            <Swipeable
+              key={record.id}
+              renderRightActions={() => renderRightActions(record.id)}
+            >
+              <View style={styles.recordBlock}>
+                <Text style={styles.recordName}>{record.name}</Text>
+                <Text style={styles.recordTime}>{formatTime(record.duration_ms)}</Text>
+              </View>
+            </Swipeable>
           ))
         )}
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   scrollContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -145,13 +207,39 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginBottom: 8,
   },
-  input: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+  suggestionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    width: '80%',
+    alignSelf: 'center',
+  },
+  suggestionButton: {
+    backgroundColor: '#E8E8E8',
+    borderRadius: 16,
     paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  input: {
+    minWidth: 80,
+    maxWidth: 250,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+    paddingHorizontal: 8,
     paddingVertical: 8,
+    marginBottom: 16,
+    fontSize: 28,
+    textAlign: 'center',
+  },
+  activityText: {
+    fontSize: 28,
+    color: '#333',
     marginBottom: 16,
   },
   time: {
@@ -194,5 +282,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontVariant: ['tabular-nums'],
+  },
+  deleteAction: {
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginRight: 8,
+    borderRadius: 6,
+    marginVertical: 4,
   },
 });
