@@ -29,7 +29,23 @@ export default function Focus() {
   const loadRecords = async () => {
     try {
       const data = await getStopwatchRecords();
-      setRecords(data);
+      const recordMaxByName = data.reduce((acc, record) => {
+        const key = record.name || 'Unnamed';
+        const currentMax = acc[key] || 0;
+        if (record.duration_ms > currentMax) {
+          acc[key] = record.duration_ms;
+        }
+        return acc;
+      }, {});
+
+      const recordsWithFlags = data.map((record) => ({
+        ...record,
+        isRecord: (record.name || 'Unnamed') in recordMaxByName
+          ? record.duration_ms === recordMaxByName[record.name || 'Unnamed']
+          : false,
+      }));
+
+      setRecords(recordsWithFlags);
       // Extract unique activity names from records
       const uniqueNames = [...new Set(data.map(record => record.name).filter(name => name && !defaultSuggestions.includes(name)))];
       setCustomSuggestions(uniqueNames);
@@ -136,12 +152,11 @@ export default function Focus() {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    const centiseconds = Math.floor((ms % 1000) / 10);
     const pad2 = (n) => String(n).padStart(2, '0');
     const main = hours > 0
       ? `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
       : `${pad2(minutes)}:${pad2(seconds)}`;
-    return `${main}.${pad2(centiseconds)}`;
+    return main;
   };
 
   const formatDateTime = (timestamp) => {
@@ -191,14 +206,21 @@ export default function Focus() {
         {records.length === 0 ? (
           <Text style={styles.noRecords}>No sessions yet</Text>
         ) : (
-          records.map((record) => (
+          records.slice(0, 10).map((record) => (
             <Swipeable
               key={record.id}
               renderRightActions={() => renderRightActions(record.id)}
             >
               <View style={styles.recordBlock}>
                 <Text style={styles.recordName}>{record.name}</Text>
-                <Text style={styles.recordTime}>{formatTime(record.duration_ms)} - {formatDateTime(record.created_at)}</Text>
+                <View style={styles.recordTimeRow}>
+                  {record.isRecord && (
+                    <Ionicons name="trophy" size={14} color="#D4AF37" style={styles.recordMedal} />
+                  )}
+                  <Text style={styles.recordTime}>
+                    {formatTime(record.duration_ms)} - {formatDateTime(record.created_at)}
+                  </Text>
+                </View>
               </View>
             </Swipeable>
           ))
@@ -255,15 +277,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
     paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingVertical: 0,
     marginBottom: 16,
     fontSize: 28,
     textAlign: 'center',
+    height: 40,
   },
   activityText: {
     fontSize: 28,
     color: '#333',
     marginBottom: 16,
+    height: 40,
+    lineHeight: 40,
   },
   time: {
     fontSize: 32,
@@ -305,6 +330,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontVariant: ['tabular-nums'],
+  },
+  recordTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordMedal: {
+    marginRight: 6,
   },
   deleteAction: {
     justifyContent: 'center',

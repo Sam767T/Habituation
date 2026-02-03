@@ -5,6 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getHabits, addHabit, deleteHabit, getHabitStats, getHabitLogsForRange } from '../db/habitDB';
+import { getStopwatchRecords } from '../db/stopwatchDB';
 
 export default function PageTwo() {
   const [habits, setHabits] = useState([]);
@@ -14,6 +15,8 @@ export default function PageTwo() {
   const [expandedHabitId, setExpandedHabitId] = useState(null);
   const [habitStatsById, setHabitStatsById] = useState({});
   const [habitLogsById, setHabitLogsById] = useState({});
+  const [focusActivities, setFocusActivities] = useState([]);
+  const [focusDataByName, setFocusDataByName] = useState({});
 
   useEffect(() => {
     loadHabits();
@@ -29,6 +32,26 @@ export default function PageTwo() {
     try {
       const data = await getHabits();
       setHabits(data);
+      const records = await getStopwatchRecords();
+      const activityMap = new Map();
+
+      records.forEach((record) => {
+        const activityName = record.name || 'Unnamed';
+        if (!activityMap.has(activityName)) {
+          activityMap.set(activityName, []);
+        }
+        activityMap.get(activityName).push(record);
+      });
+
+      const activities = Array.from(activityMap.entries())
+        .map(([name, activityRecords]) => ({
+          name,
+          kind: 'focus',
+          records: activityRecords,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setFocusActivities(activities);
     } catch (error) {
       console.error('Failed to load habits:', error);
     }
@@ -65,7 +88,7 @@ export default function PageTwo() {
             try {
               await deleteHabit(habitId);
               await loadHabits();
-              if (expandedHabitId === habitId) {
+              if (expandedHabitId === `habit-${habitId}`) {
                 setExpandedHabitId(null);
               }
               setHabitStatsById((prev) => {
@@ -92,25 +115,76 @@ export default function PageTwo() {
     </Pressable>
   );
 
-  const handleToggleHabit = async (habit) => {
-    if (expandedHabitId === habit.id) {
+  const getItemKey = (item) => (
+    item.kind === 'focus' ? `focus-${item.name}` : `habit-${item.id}`
+  );
+
+  const handleToggleHabit = async (item) => {
+    const itemKey = getItemKey(item);
+    if (expandedHabitId === itemKey) {
       setExpandedHabitId(null);
       return;
     }
 
-    setExpandedHabitId(habit.id);
+    setExpandedHabitId(itemKey);
     try {
-      let stats = await getHabitStats(habit.id, 10);
-      
+      if (item.kind === 'focus') {
+        const now = new Date();
+        const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const startDate = formatDateKey(rangeStart);
+        const endDate = formatDateKey(rangeEnd);
+
+        const dailyTotals = {};
+        const dailyTotalsAll = {};
+        let firstDateKey = null;
+
+        item.records.forEach((record) => {
+          const recordDateKey = formatDateKey(new Date(record.created_at));
+          if (!firstDateKey || recordDateKey < firstDateKey) {
+            firstDateKey = recordDateKey;
+          }
+
+          dailyTotalsAll[recordDateKey] = (dailyTotalsAll[recordDateKey] || 0) + record.duration_ms;
+
+          if (recordDateKey >= startDate && recordDateKey <= endDate) {
+            dailyTotals[recordDateKey] = (dailyTotals[recordDateKey] || 0) + record.duration_ms;
+          }
+        });
+
+        const recordMs = Object.values(dailyTotalsAll).reduce(
+          (max, value) => (value > max ? value : max),
+          0
+        );
+        const totalMs = Object.values(dailyTotalsAll).reduce(
+          (sum, value) => sum + value,
+          0
+        );
+
+        setFocusDataByName((prev) => ({
+          ...prev,
+          [item.name]: {
+            dailyTotals,
+            firstDateKey,
+            recordMs,
+            totalMs,
+          },
+        }));
+
+        return;
+      }
+
+      let stats = await getHabitStats(item.id, 10);
+
       // For negative habits, exclude today's date
-      if (habit.type === 'negative') {
+      if (item.type === 'negative') {
         const today = new Date().toISOString().split('T')[0];
         stats = stats.filter(stat => stat.log_date !== today);
       }
-      
+
       setHabitStatsById((prev) => ({
         ...prev,
-        [habit.id]: stats,
+        [item.id]: stats,
       }));
 
       const now = new Date();
@@ -118,11 +192,11 @@ export default function PageTwo() {
       const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       const startDate = formatDateKey(rangeStart);
       const endDate = formatDateKey(rangeEnd);
-      const logs = await getHabitLogsForRange(habit.id, startDate, endDate);
+      const logs = await getHabitLogsForRange(item.id, startDate, endDate);
 
       setHabitLogsById((prev) => ({
         ...prev,
-        [habit.id]: logs,
+        [item.id]: logs,
       }));
     } catch (error) {
       console.error('Failed to load stats:', error);
@@ -160,6 +234,31 @@ export default function PageTwo() {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
   };
 
+  const formatDurationLabel = (ms) => {
+    const totalMinutes = Math.floor(ms / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours === 0) {
+      return `${minutes}m`;
+    }
+    return `${hours}h ${minutes}m`;
+  };
+
+  const calculateFocusStreak = (dailyTotals) => {
+    let streak = 0;
+    const current = new Date();
+    for (let i = 0; i < 366; i++) {
+      const key = formatDateKey(current);
+      if (dailyTotals[key] && dailyTotals[key] > 0) {
+        streak++;
+      } else {
+        break;
+      }
+      current.setDate(current.getDate() - 1);
+    }
+    return streak;
+  };
+
   const getMonthMatrix = (year, monthIndex) => {
     const first = new Date(year, monthIndex, 1);
     const last = new Date(year, monthIndex + 1, 0);
@@ -183,14 +282,25 @@ export default function PageTwo() {
     return weeks;
   };
 
-  const renderStatistics = (habit, stats, logs) => {
-    const streak = calculateStreak(stats);
-    const successRate = calculateSuccessRate(stats);
+  const renderStatistics = (item, stats, logs, focusData) => {
+    const isFocus = item.kind === 'focus';
+    const logsMap = isFocus
+      ? {}
+      : logs.reduce((acc, log) => {
+        acc[log.log_date] = log.completed === 1;
+        return acc;
+      }, {});
 
-    const logsMap = logs.reduce((acc, log) => {
-      acc[log.log_date] = log.completed === 1;
-      return acc;
-    }, {});
+    const dailyTotals = isFocus ? (focusData?.dailyTotals || {}) : {};
+    const recordMs = isFocus ? (focusData?.recordMs || 0) : 0;
+    const totalMs = isFocus ? (focusData?.totalMs || 0) : 0;
+
+    const streak = isFocus ? calculateFocusStreak(dailyTotals) : calculateStreak(stats);
+    const successRate = isFocus ? 0 : calculateSuccessRate(stats);
+    const daysLogged = isFocus
+      ? Object.values(dailyTotals).filter((value) => value > 0).length
+      : stats.length;
+    const totalHours = Math.floor(totalMs / 3600000);
 
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -200,17 +310,35 @@ export default function PageTwo() {
     const currentMonthWeeks = getMonthMatrix(currentYear, currentMonthIndex);
     const previousMonthWeeks = getMonthMatrix(previousMonthDate.getFullYear(), previousMonthDate.getMonth());
 
-    const habitStartDate = logs.length > 0 ? logs[0].log_date : (habit.created_at ? formatDateKey(new Date(habit.created_at)) : null);
+    const habitStartDate = logs.length > 0 ? logs[0].log_date : (item.created_at ? formatDateKey(new Date(item.created_at)) : null);
+    const focusStartDate = focusData?.firstDateKey || null;
     const todayKey = formatDateKey(now);
 
     const getDayStatus = (year, monthIndex, day) => {
       const dateKey = formatDateKey(new Date(year, monthIndex, day));
 
+      if (isFocus) {
+        if (focusStartDate && dateKey < focusStartDate) {
+          return '—';
+        }
+        if (dateKey > todayKey) {
+          return '';
+        }
+        const totalMs = dailyTotals[dateKey] || 0;
+        if (dateKey === todayKey && totalMs <= 0) {
+          return '';
+        }
+        if (totalMs <= 0) {
+          return '✕';
+        }
+        return formatDurationLabel(totalMs);
+      }
+
       if (habitStartDate && dateKey < habitStartDate) {
         return '—';
       }
 
-      if (habit.type === 'negative' && dateKey === todayKey) {
+      if (item.type === 'negative' && dateKey === todayKey) {
         return '';
       }
 
@@ -235,13 +363,17 @@ export default function PageTwo() {
           </View>
           <View style={styles.statCard}>
             <Ionicons name="checkmark-circle" size={24} color="#34C759" />
-            <Text style={styles.statValue}>{successRate}%</Text>
-            <Text style={styles.statLabel}>Success Rate</Text>
+            <Text style={styles.statValue}>
+              {isFocus ? formatDurationLabel(recordMs) : `${successRate}%`}
+            </Text>
+            <Text style={styles.statLabel}>
+              {isFocus ? 'All-time Record' : 'Success Rate'}
+            </Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="calendar" size={24} color="#007AFF" />
-            <Text style={styles.statValue}>{stats.length}</Text>
-            <Text style={styles.statLabel}>Days Logged</Text>
+            <Text style={styles.statValue}>{isFocus ? totalHours : daysLogged}</Text>
+            <Text style={styles.statLabel}>{isFocus ? 'Total Hours Logged' : 'Days Logged'}</Text>
           </View>
         </View>
 
@@ -305,53 +437,75 @@ export default function PageTwo() {
     );
   };
 
-  const renderHabitItem = (habit) => {
-    const isExpanded = expandedHabitId === habit.id;
-    const stats = habitStatsById[habit.id] || [];
-    const logs = habitLogsById[habit.id] || [];
+  const renderHabitItem = (item) => {
+    const isFocus = item.kind === 'focus';
+    const itemKey = getItemKey(item);
+    const isExpanded = expandedHabitId === itemKey;
+    const stats = isFocus ? [] : (habitStatsById[item.id] || []);
+    const logs = isFocus ? [] : (habitLogsById[item.id] || []);
+    const focusData = isFocus ? focusDataByName[item.name] : null;
+
+    const content = (
+      <View
+        style={[
+          styles.habitItem,
+          isFocus
+            ? styles.focusHabit
+            : (item.type === 'positive' ? styles.positiveHabit : styles.negativeHabit),
+          isExpanded && styles.habitItemExpanded,
+        ]}
+      >
+        <Pressable
+          style={styles.habitHeader}
+          onPress={() => handleToggleHabit(item)}
+        >
+          <View style={styles.habitHeaderLeft}>
+            <Ionicons
+              name={isFocus ? 'time' : (item.type === 'positive' ? 'trending-up' : 'trending-down')}
+              size={20}
+              color={isFocus ? '#007AFF' : (item.type === 'positive' ? '#34C759' : '#FF3B30')}
+            />
+            <Text style={styles.habitItemName}>{item.name}</Text>
+          </View>
+          <View style={styles.habitHeaderRight}>
+            <Ionicons
+              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#666"
+            />
+          </View>
+        </Pressable>
+
+        {isExpanded && (
+          <View style={styles.habitBody}>
+            {renderStatistics(item, stats, logs, focusData)}
+          </View>
+        )}
+      </View>
+    );
+
+    if (isFocus) {
+      return (
+        <View key={itemKey}>
+          {content}
+        </View>
+      );
+    }
 
     return (
       <Swipeable
-        key={habit.id}
-        renderRightActions={() => renderRightActions(habit.id)}
+        key={itemKey}
+        renderRightActions={() => renderRightActions(item.id)}
       >
-        <View
-          style={[
-            styles.habitItem,
-            habit.type === 'positive' ? styles.positiveHabit : styles.negativeHabit,
-            isExpanded && styles.habitItemExpanded,
-          ]}
-        >
-          <Pressable
-            style={styles.habitHeader}
-            onPress={() => handleToggleHabit(habit)}
-          >
-            <View style={styles.habitHeaderLeft}>
-              <Ionicons
-                name={habit.type === 'positive' ? 'trending-up' : 'trending-down'}
-                size={20}
-                color={habit.type === 'positive' ? '#34C759' : '#FF3B30'}
-              />
-              <Text style={styles.habitItemName}>{habit.name}</Text>
-            </View>
-            <View style={styles.habitHeaderRight}>
-              <Ionicons
-                name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#666"
-              />
-            </View>
-          </Pressable>
-
-          {isExpanded && (
-            <View style={styles.habitBody}>
-              {renderStatistics(habit, stats, logs)}
-            </View>
-          )}
-        </View>
+        {content}
       </Swipeable>
     );
   };
+
+  const combinedItems = [
+    ...habits.map((habit) => ({ ...habit, kind: 'habit' })),
+    ...focusActivities,
+  ];
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -367,8 +521,8 @@ export default function PageTwo() {
         </View>
 
         <ScrollView style={styles.habitsList} contentContainerStyle={styles.habitsListContent}>
-          {habits.map(renderHabitItem)}
-          {habits.length === 0 && (
+          {combinedItems.map(renderHabitItem)}
+          {combinedItems.length === 0 && (
             <Text style={styles.noHabits}>No habits yet. Add one to get started!</Text>
           )}
         </ScrollView>
@@ -485,6 +639,9 @@ const styles = StyleSheet.create({
   },
   negativeHabit: {
     borderLeftColor: '#FF3B30',
+  },
+  focusHabit: {
+    borderLeftColor: '#007AFF',
   },
   habitItemExpanded: {
     backgroundColor: '#fdfdfd',
@@ -613,9 +770,10 @@ const styles = StyleSheet.create({
     color: '#444',
   },
   dayStatus: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: '#111',
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
