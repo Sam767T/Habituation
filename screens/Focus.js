@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,6 +77,7 @@ export default function Focus() {
 
   const start = () => {
     if (running) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     startRef.current = Date.now();
     setElapsedMs(0);
     setRunning(true);
@@ -83,6 +85,7 @@ export default function Focus() {
 
   const stop = async () => {
     if (!running) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRunning(false);
     // Save to database
     try {
@@ -160,13 +163,32 @@ export default function Focus() {
   };
 
   const formatDateTime = (timestamp) => {
-    const date = new Date(timestamp);
-    const day = date.getDate();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[date.getMonth()];
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${day} ${month} at ${hours}:${minutes}`;
+    let date;
+    if (typeof timestamp === 'string') {
+      const match = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+      if (match) {
+        const [, y, m, d, h, min, s] = match;
+        date = new Date(
+          Number(y),
+          Number(m) - 1,
+          Number(d),
+          Number(h),
+          Number(min),
+          Number(s || 0)
+        );
+      } else {
+        date = new Date(timestamp);
+      }
+    } else {
+      date = new Date(timestamp);
+    }
+
+    return date.toLocaleString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   return (
@@ -191,7 +213,14 @@ export default function Focus() {
             caretHidden={false}
           />
         )}
-        <Text style={styles.time}>{formatTime(elapsedMs)}</Text>
+        <Text
+          style={styles.time}
+          shouldRasterizeIOS
+          renderToHardwareTextureAndroid
+          allowFontScaling={false}
+        >
+          {formatTime(elapsedMs)}
+        </Text>
         <Pressable style={styles.iconButton} onPress={toggleTimer}>
           <Ionicons
             name={running ? 'stop-circle' : 'play-circle'}
@@ -294,6 +323,10 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontVariant: ['tabular-nums'],
     marginBottom: 16,
+    textAlign: 'center',
+    minWidth: 120,
+    backgroundColor: '#fff',
+    includeFontPadding: false,
   },
   iconButton: {
     padding: 8,

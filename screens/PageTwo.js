@@ -314,6 +314,10 @@ export default function PageTwo() {
     const focusStartDate = focusData?.firstDateKey || null;
     const todayKey = formatDateKey(now);
 
+    const isToday = (year, monthIndex, day) => (
+      formatDateKey(new Date(year, monthIndex, day)) === todayKey
+    );
+
     const getDayStatus = (year, monthIndex, day) => {
       const dateKey = formatDateKey(new Date(year, monthIndex, day));
 
@@ -394,7 +398,9 @@ export default function PageTwo() {
                   <View key={dayIndex} style={styles.dayCell}>
                     {day ? (
                       <>
-                        <Text style={styles.dayNumber}>{day}</Text>
+                        <Text style={[styles.dayNumber, isToday(previousMonthDate.getFullYear(), previousMonthDate.getMonth(), day) && styles.dayNumberToday]}>
+                          {day}
+                        </Text>
                         <Text style={styles.dayStatus}>
                           {getDayStatus(previousMonthDate.getFullYear(), previousMonthDate.getMonth(), day)}
                         </Text>
@@ -421,7 +427,9 @@ export default function PageTwo() {
                   <View key={dayIndex} style={styles.dayCell}>
                     {day ? (
                       <>
-                        <Text style={styles.dayNumber}>{day}</Text>
+                        <Text style={[styles.dayNumber, isToday(currentYear, currentMonthIndex, day) && styles.dayNumberToday]}>
+                          {day}
+                        </Text>
                         <Text style={styles.dayStatus}>
                           {getDayStatus(currentYear, currentMonthIndex, day)}
                         </Text>
@@ -764,16 +772,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 2,
     borderRadius: 6,
+    flexDirection: 'column',
   },
   dayNumber: {
     fontSize: 11,
     color: '#444',
+    height: 13,
+    lineHeight: 13,
+    marginBottom: 2,
+  },
+  dayNumberToday: {
+    color: '#007AFF',
+    fontWeight: '700',
   },
   dayStatus: {
     fontSize: 10,
     fontWeight: '600',
     color: '#111',
     textAlign: 'center',
+    height: 12,
+    lineHeight: 12,
   },
   modalOverlay: {
     flex: 1,

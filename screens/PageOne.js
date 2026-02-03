@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -65,7 +66,19 @@ export default function PageOne() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const currentStatus = todayLogs[habitId] || false;
-      await logHabit(habitId, today, !currentStatus);
+      const willBeLogged = !currentStatus;
+      
+      // Only show celebration if logging (not unlogging)
+      if (willBeLogged) {
+        // Celebratory haptics
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await new Promise(resolve => setTimeout(resolve, 80));
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+      
+      await logHabit(habitId, today, willBeLogged);
       await loadData();
     } catch (error) {
       console.error('Failed to log habit:', error);
@@ -79,7 +92,19 @@ export default function PageOne() {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       const currentStatus = yesterdayLogs[habitId] || false;
-      await logHabit(habitId, yesterdayStr, !currentStatus);
+      const willBeLogged = !currentStatus;
+      
+      // Only show celebration if logging (not unlogging)
+      if (willBeLogged) {
+        // Celebratory haptics
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await new Promise(resolve => setTimeout(resolve, 80));
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+      
+      await logHabit(habitId, yesterdayStr, willBeLogged);
       await loadData();
     } catch (error) {
       console.error('Failed to log habit:', error);
@@ -99,9 +124,11 @@ export default function PageOne() {
           <Text style={[styles.habitName, isLogged && styles.habitNameCompleted]}>
             {habit.name}
           </Text>
-          {isLogged && (
-            <Ionicons name="checkmark-circle" size={24} color="#34C759" />
-          )}
+          <View style={styles.checkmarkPlaceholder}>
+            {isLogged && (
+              <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+            )}
+          </View>
         </View>
       </Pressable>
     );
@@ -119,9 +146,11 @@ export default function PageOne() {
           <Text style={[styles.habitName, isLogged && styles.habitNameCompleted]}>
             {habit.name}
           </Text>
-          {isLogged && (
-            <Ionicons name="checkmark-circle" size={24} color="#34C759" />
-          )}
+          <View style={styles.checkmarkPlaceholder}>
+            {isLogged && (
+              <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+            )}
+          </View>
         </View>
         <Text style={styles.habitSubtext}>Did you abstain yesterday?</Text>
       </Pressable>
@@ -136,7 +165,7 @@ export default function PageOne() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView style={styles.scrollContainer}>
+      <ScrollView style={styles.scrollContainer} stickyHeaderIndices={[0]}>
         <View style={styles.header}>
           <Text style={styles.headerDate}>{formatDate()}</Text>
           <Text style={styles.headerTitle}>Log Habits</Text>
@@ -246,6 +275,12 @@ const styles = StyleSheet.create({
   habitCardContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  checkmarkPlaceholder: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   habitName: {

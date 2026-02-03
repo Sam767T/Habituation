@@ -21,7 +21,7 @@ async function initDatabase() {
 export async function addStopwatchRecord(name, durationMs) {
   const database = await initDatabase();
   await database.runAsync(
-    'INSERT INTO stopwatch_records (name, duration_ms) VALUES (?, ?)',
+    "INSERT INTO stopwatch_records (name, duration_ms, created_at) VALUES (?, ?, datetime('now','localtime'))",
     [name || 'Unnamed', durationMs]
   );
 }
