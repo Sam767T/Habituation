@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,12 +88,25 @@ export default function Focus() {
   };
 
   const handleDeleteRecord = async (id) => {
-    try {
-      await deleteStopwatchRecord(id);
-      await loadRecords();
-    } catch (error) {
-      console.error('Failed to delete record:', error);
-    }
+    Alert.alert(
+      'Delete Session',
+      'Are you sure you want to delete this session?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteStopwatchRecord(id);
+              await loadRecords();
+            } catch (error) {
+              console.error('Failed to delete record:', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderRightActions = (recordId) => (
@@ -101,7 +114,7 @@ export default function Focus() {
       style={styles.deleteAction}
       onPress={() => handleDeleteRecord(recordId)}
     >
-      <Ionicons name="trash" size={24} color="#fff" />
+      <Ionicons name="trash" size={24} color="#333" />
     </Pressable>
   );
 
@@ -129,6 +142,16 @@ export default function Focus() {
       ? `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
       : `${pad2(minutes)}:${pad2(seconds)}`;
     return `${main}.${pad2(centiseconds)}`;
+  };
+
+  const formatDateTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const day = date.getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[date.getMonth()];
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${day} ${month} at ${hours}:${minutes}`;
   };
 
   return (
@@ -175,7 +198,7 @@ export default function Focus() {
             >
               <View style={styles.recordBlock}>
                 <Text style={styles.recordName}>{record.name}</Text>
-                <Text style={styles.recordTime}>{formatTime(record.duration_ms)}</Text>
+                <Text style={styles.recordTime}>{formatTime(record.duration_ms)} - {formatDateTime(record.created_at)}</Text>
               </View>
             </Swipeable>
           ))
@@ -284,13 +307,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   deleteAction: {
-    backgroundColor: '#FF3B30',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginRight: 8,
-    borderRadius: 6,
-    marginVertical: 4,
+    paddingHorizontal: 16,
   },
 });

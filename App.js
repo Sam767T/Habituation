@@ -15,8 +15,8 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
         <Tab.Navigator screenOptions={{ headerShown: false }}>
-          <Tab.Screen name="Page One" component={PageOne} />
-          <Tab.Screen name="Page Two" component={PageTwo} />
+          <Tab.Screen name="Log" component={PageOne} />
+          <Tab.Screen name="Track" component={PageTwo} />
           <Tab.Screen name="Focus" component={Focus} />
         </Tab.Navigator>
         <StatusBar style="auto" />
