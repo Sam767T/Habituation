@@ -4,12 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { getHabits, addHabit, deleteHabit, getHabitStats, getHabitLogsForRange } from '../db/habitDB';
-import { getStopwatchRecords } from '../db/stopwatchDB';
+import { getHabits, addHabit, deleteHabit, getHabitStats, getHabitLogsForRange, resetAllData as resetHabitData } from '../db/habitDB';
+import { getStopwatchRecords, resetAllData as resetStopwatchData } from '../db/stopwatchDB';
 
 export default function PageTwo() {
   const [habits, setHabits] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitType, setNewHabitType] = useState('positive');
   const [expandedHabitId, setExpandedHabitId] = useState(null);
@@ -106,6 +107,36 @@ export default function PageTwo() {
     );
   };
 
+  const handleResetAllData = async () => {
+    Alert.alert(
+      'Reset All Data',
+      'This will permanently delete ALL habits, logs, and focus sessions. This cannot be undone. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset Everything',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await resetHabitData();
+              await resetStopwatchData();
+              setExpandedHabitId(null);
+              setHabitStatsById({});
+              setHabitLogsById({});
+              setFocusDataByName({});
+              await loadHabits();
+              setSettingsVisible(false);
+              Alert.alert('Success', 'All data has been reset');
+            } catch (error) {
+              console.error('Failed to reset data:', error);
+              Alert.alert('Error', 'Failed to reset data');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderRightActions = (habitId) => (
     <Pressable
       style={styles.deleteAction}
@@ -178,7 +209,7 @@ export default function PageTwo() {
 
       // For negative habits, exclude today's date
       if (item.type === 'negative') {
-        const today = new Date().toISOString().split('T')[0];
+        const today = formatDateKey(new Date());
         stats = stats.filter(stat => stat.log_date !== today);
       }
 
@@ -520,12 +551,20 @@ export default function PageTwo() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Track Habits</Text>
-          <Pressable
-            style={styles.addButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <Ionicons name="add-circle" size={32} color="#007AFF" />
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => setSettingsVisible(true)}
+            >
+              <Ionicons name="ellipsis-horizontal-circle" size={32} color="#666" />
+            </Pressable>
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => setModalVisible(true)}
+            >
+              <Ionicons name="add-circle" size={32} color="#007AFF" />
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView style={styles.habitsList} contentContainerStyle={styles.habitsListContent}>
@@ -592,6 +631,35 @@ export default function PageTwo() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="none"
+        transparent={true}
+        visible={settingsVisible}
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Settings</Text>
+              <Pressable onPress={() => setSettingsVisible(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </Pressable>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Data Management</Text>
+              <Pressable style={styles.dangerButton} onPress={handleResetAllData}>
+                <Ionicons name="trash-bin" size={20} color="#fff" />
+                <Text style={styles.dangerButtonText}>Reset All Data</Text>
+              </Pressable>
+              <Text style={styles.dangerHint}>
+                This will permanently delete all habits, logs, and focus sessions.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -619,7 +687,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000',
   },
-  addButton: {
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerButton: {
     padding: 4,
   },
   habitsList: {
@@ -862,5 +935,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  settingsSection: {
+    marginBottom: 24,
+  },
+  settingsSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 12,
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    padding: 16,
+    gap: 8,
+  },
+  dangerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dangerHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

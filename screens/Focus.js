@@ -15,7 +15,8 @@ export default function Focus() {
   const [customSuggestions, setCustomSuggestions] = useState([]);
   const startRef = useRef(null);
   const intervalRef = useRef(null);
-  const defaultSuggestions = ['Read', 'Write', 'Focus', 'Exercise'];
+  const defaultSuggestions = ['Reading', 'Writing', 'Focusing', 'Exercising'];
+  const isNameValid = name.trim().length > 0;
 
   useEffect(() => {
     loadRecords();
@@ -77,6 +78,10 @@ export default function Focus() {
 
   const start = () => {
     if (running) return;
+    if (!isNameValid) {
+      Alert.alert('Name Required', 'Enter a session name to start.');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     startRef.current = Date.now();
     setElapsedMs(0);
@@ -221,7 +226,11 @@ export default function Focus() {
         >
           {formatTime(elapsedMs)}
         </Text>
-        <Pressable style={styles.iconButton} onPress={toggleTimer}>
+        <Pressable
+          style={[styles.iconButton, !running && !isNameValid && styles.iconButtonDisabled]}
+          onPress={toggleTimer}
+          disabled={!running && !isNameValid}
+        >
           <Ionicons
             name={running ? 'stop-circle' : 'play-circle'}
             size={64}
@@ -330,6 +339,9 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
+  },
+  iconButtonDisabled: {
+    opacity: 0.4,
   },
   recordsSection: {
     paddingHorizontal: 16,

@@ -117,49 +117,9 @@ export async function getHabitLogsForRange(habitId, startDate, endDate) {
   return logs;
 }
 
-// Function to create dummy data
-export async function createDummyData() {
+export async function resetAllData() {
   const database = await initDatabase();
-  
-  // Check if we already have data
-  const existingHabits = await getHabits();
-  if (existingHabits.length > 0) {
-    return; // Data already exists
-  }
-  
-  // Add positive habits
-  await addHabit('Morning Exercise', 'positive');
-  await addHabit('Read for 30 mins', 'positive');
-  await addHabit('Meditation', 'positive');
-  
-  // Add negative habits
-  await addHabit('Smoking', 'negative');
-  await addHabit('Junk Food', 'negative');
-  await addHabit('Social Media Doom Scrolling', 'negative');
-  
-  // Get all habits
-  const habits = await getHabits();
-  
-  // Create logs for the past 14 days
-  for (let i = 0; i < 14; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    
-    for (const habit of habits) {
-      // Randomly log habits with different probabilities
-      const random = Math.random();
-      let completed = false;
-      
-      if (habit.type === 'positive') {
-        // 70% success rate for positive habits
-        completed = random > 0.3;
-      } else {
-        // 60% success rate for abstaining from negative habits
-        completed = random > 0.4;
-      }
-      
-      await logHabit(habit.id, dateStr, completed);
-    }
-  }
+  await database.runAsync('DELETE FROM habit_logs');
+  await database.runAsync('DELETE FROM habits');
 }
+

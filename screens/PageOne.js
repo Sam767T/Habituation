@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { getHabits, logHabit, getHabitLogForDate, getAllHabitLogsForDate, createDummyData } from '../db/habitDB';
+import { getHabits, logHabit, getHabitLogForDate, getAllHabitLogsForDate } from '../db/habitDB';
 
 export default function PageOne() {
   const [habits, setHabits] = useState([]);
@@ -24,8 +24,12 @@ export default function PageOne() {
   );
 
   const initializeData = async () => {
-    await createDummyData();
     await loadData();
+  };
+
+  const formatDateKey = (date) => {
+    const pad2 = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
   };
 
   const loadData = async () => {
@@ -39,7 +43,7 @@ export default function PageOne() {
       setNegativeHabits(negative);
 
       // Load today's logs
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateKey(new Date());
       const todayData = await getAllHabitLogsForDate(today);
       const todayMap = {};
       todayData.forEach(log => {
@@ -50,7 +54,7 @@ export default function PageOne() {
       // Load yesterday's logs
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const yesterdayStr = formatDateKey(yesterday);
       const yesterdayData = await getAllHabitLogsForDate(yesterdayStr);
       const yesterdayMap = {};
       yesterdayData.forEach(log => {
@@ -64,7 +68,7 @@ export default function PageOne() {
 
   const handlePositiveHabitLog = async (habitId) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateKey(new Date());
       const currentStatus = todayLogs[habitId] || false;
       const willBeLogged = !currentStatus;
       
@@ -90,7 +94,7 @@ export default function PageOne() {
     try {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const yesterdayStr = formatDateKey(yesterday);
       const currentStatus = yesterdayLogs[habitId] || false;
       const willBeLogged = !currentStatus;
       

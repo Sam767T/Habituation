@@ -38,3 +38,8 @@ export async function deleteStopwatchRecord(id) {
   const database = await initDatabase();
   await database.runAsync('DELETE FROM stopwatch_records WHERE id = ?', [id]);
 }
+
+export async function resetAllData() {
+  const database = await initDatabase();
+  await database.runAsync('DELETE FROM stopwatch_records');
+}
